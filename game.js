@@ -22,8 +22,26 @@ const ship = {
   thrust: 0.15,
   friction: 0.99,
   turnSpeed: 0.06,
-  shootCooldown: 0
+  shootCooldown: 0,
+  tripleShotTimer: 0
 };
+
+// --- Power-up: disparo triple ---
+const TRIPLE_SHOT_CHANCE = 0.2;    // 20% al destruir un asteroide
+const TRIPLE_SHOT_DURATION = 600;  // ~10s a 60fps
+const TRIPLE_SHOT_SPREAD = 0.25;   // radianes entre balas del abanico
+let tripleShotUsed = false;        // ya se activó una vez esta partida
+
+// --- Power-up: bomba nova ---
+let novaBombUsed = false; // ya se activó una vez esta partida
+
+function updateNovaBomb() {
+  if (!keys['KeyB'] || novaBombUsed) return;
+  novaBombUsed = true;
+  const count = asteroids.length;
+  asteroids.length = 0;
+  for (let i = 0; i < count; i++) spawnAsteroidAwayFromShip();
+}
 
 function updateShip() {
   if (keys['ArrowLeft'] || keys['KeyA']) ship.angle -= ship.turnSpeed;
@@ -38,6 +56,8 @@ function updateShip() {
   ship.x += ship.vx;
   ship.y += ship.vy;
   wrap(ship);
+
+  if (ship.tripleShotTimer > 0) ship.tripleShotTimer--;
 
   if (ship.shootCooldown > 0) ship.shootCooldown--;
   if (keys['Space'] && ship.shootCooldown === 0) {
@@ -60,14 +80,24 @@ function drawShip() {
 // --- Disparos ---
 const bullets = [];
 
-function shoot() {
+function spawnBullet(angle) {
   bullets.push({
-    x: ship.x + Math.cos(ship.angle) * ship.radius,
-    y: ship.y + Math.sin(ship.angle) * ship.radius,
-    vx: Math.cos(ship.angle) * 6,
-    vy: Math.sin(ship.angle) * 6,
+    x: ship.x + Math.cos(angle) * ship.radius,
+    y: ship.y + Math.sin(angle) * ship.radius,
+    vx: Math.cos(angle) * 6,
+    vy: Math.sin(angle) * 6,
     life: 60
   });
+}
+
+function shoot() {
+  if (ship.tripleShotTimer > 0) {
+    spawnBullet(ship.angle - TRIPLE_SHOT_SPREAD);
+    spawnBullet(ship.angle);
+    spawnBullet(ship.angle + TRIPLE_SHOT_SPREAD);
+  } else {
+    spawnBullet(ship.angle);
+  }
 }
 
 function updateBullets() {
@@ -145,6 +175,25 @@ function drawAsteroids() {
   }
 }
 
+function drawTripleShotIndicator() {
+  if (ship.tripleShotTimer <= 0) return;
+  ctx.fillStyle = '#fff';
+  ctx.font = '16px sans-serif';
+  ctx.textAlign = 'center';
+  const seconds = Math.ceil(ship.tripleShotTimer / 60);
+  ctx.fillText(`TRIPLE SHOT! ${seconds}s`, W / 2, 30);
+}
+
+function drawNovaBombIndicator() {
+  ctx.fillStyle = '#fff';
+  ctx.font = '14px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(
+    novaBombUsed ? 'BOMBA NOVA: usada' : 'BOMBA NOVA: lista (B)',
+    10, 20
+  );
+}
+
 // --- Colisiones ---
 function checkCollisions() {
   for (let i = asteroids.length - 1; i >= 0; i--) {
@@ -156,6 +205,10 @@ function checkCollisions() {
         asteroids.splice(i, 1);
         bullets.splice(j, 1);
         spawnAsteroidAwayFromShip();
+        if (!tripleShotUsed && Math.random() < TRIPLE_SHOT_CHANCE) {
+          ship.tripleShotTimer = TRIPLE_SHOT_DURATION;
+          tripleShotUsed = true;
+        }
         break;
       }
     }
@@ -179,11 +232,14 @@ function loop() {
   updateShip();
   updateBullets();
   updateAsteroids();
+  updateNovaBomb();
   checkCollisions();
 
   drawShip();
   drawBullets();
   drawAsteroids();
+  drawTripleShotIndicator();
+  drawNovaBombIndicator();
 
   requestAnimationFrame(loop);
 }
